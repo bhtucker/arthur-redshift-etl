@@ -260,7 +260,7 @@ class LoadableRelation:
         for i, relation in enumerate(relations):
             target = relation.target_table_name
             source = dict(bucket_name=relation.bucket_name)
-            if relation.is_view_relation or relation.is_ctas_relation:
+            if relation.is_transformation:
                 source["object_key"] = relation.sql_file_name
             else:
                 source["object_key"] = relation.manifest_file_name
@@ -1383,7 +1383,7 @@ def show_downstream_dependents(
     width_dep = max(len(identifier) for identifier in current_level)
     line_template = (
         "{relation.identifier:{width}s}"
-        " # kind={relation.kind} index={index:4d} level={level:3d}"
+        " # {relation.source_type} index={index:4d} level={level:3d}"
         " flag={flag:9s}"
         " is_required={relation.is_required}"
     )
@@ -1438,7 +1438,7 @@ def show_upstream_dependencies(relations: Sequence[RelationDescription], selecto
 
     max_len = max(len(identifier) for identifier in dependencies)
     line_template = (
-        "{relation.identifier:{width}s} # kind={relation.kind} index={index:4d}" " is_required={relation.is_required}"
+        "{relation.identifier:{width}s} # {relation.source_type} index={index:4d}" " is_required={relation.is_required}"
     )
     for i, relation in enumerate(execution_order):
         if relation.identifier in dependencies:
