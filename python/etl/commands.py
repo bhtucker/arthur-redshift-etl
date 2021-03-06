@@ -113,44 +113,47 @@ def run_arg_as_command(my_name="arthur.py"):
     args = parser.parse_args()
     if not args.func:
         parser.print_usage()
-    elif args.cluster_id is not None:
+        return
+
+    if args.cluster_id is not None:
         submit_step(args.cluster_id, args.sub_command)
-    else:
-        # We need to configure logging before running context because that context expects
-        # logging to be setup.
-        try:
-            etl.config.configure_logging(args.prolix, args.log_level)
-        except Exception as exc:
-            croak(exc, 1)
+        return
 
-        with execute_or_bail():
-            etl.config.load_config(args.config)
+    # We need to configure logging before running context because that context expects
+    # logging to be setup.
+    try:
+        etl.config.configure_logging(args.prolix, args.log_level)
+    except Exception as exc:
+        croak(exc, 1)
 
-            if hasattr(args, "prefix"):
-                # Any command where we can select the "prefix" also needs the bucket.
-                # TODO(tom): Need to differentiate between object store (schemas) and data lake
-                #     (extracted or unloaded data)
-                setattr(args, "bucket_name", etl.config.get_config_value("object_store.s3.bucket_name"))
-                etl.config.set_config_value("object_store.s3.prefix", args.prefix)
-                etl.config.set_config_value("data_lake.s3.prefix", args.prefix)
+    with execute_or_bail():
+        etl.config.load_config(args.config)
 
-                # Create name used as prefix for resources, like DynamoDB tables or SNS topics
-                base_env = etl.config.get_config_value("resources.VPC.name").replace("dw-vpc-", "dw-etl-", 1)
-                etl.config.set_safe_config_value("resource_prefix", f"{base_env}-{args.prefix}")
+        if hasattr(args, "prefix"):
+            # Any command where we can select the "prefix" also needs the bucket.
+            # TODO(tom): Need to differentiate between object store (schemas) and data lake
+            #     (extracted or unloaded data)
+            setattr(args, "bucket_name", etl.config.get_config_value("object_store.s3.bucket_name"))
+            etl.config.set_config_value("object_store.s3.prefix", args.prefix)
+            etl.config.set_config_value("data_lake.s3.prefix", args.prefix)
 
-            dw_config = etl.config.get_dw_config()
-            if isinstance(getattr(args, "pattern", None), etl.names.TableSelector):
-                args.pattern.base_schemas = [schema.name for schema in dw_config.schemas]
+            # Create name used as prefix for resources, like DynamoDB tables or SNS topics
+            base_env = etl.config.get_config_value("resources.VPC.name").replace("dw-vpc-", "dw-etl-", 1)
+            etl.config.set_safe_config_value("resource_prefix", "{}-{}".format(base_env, args.prefix))
 
-            # The region must be set for most boto3 calls to succeed.
-            os.environ["AWS_DEFAULT_REGION"] = etl.config.get_config_value("resources.VPC.region")
-            if getattr(args, "use_monitor", False):
-                etl.monitor.start_monitors(args.prefix)
-                if not args.dry_run:
-                    logger.debug("Setting marker in events table for start of '%s' step", args.sub_command)
-                    etl.monitor.Monitor.marker_payload(args.sub_command).emit()
+        dw_config = etl.config.get_dw_config()
+        if isinstance(getattr(args, "pattern", None), etl.names.TableSelector):
+            args.pattern.base_schemas = [schema.name for schema in dw_config.schemas]
 
-            args.func(args)
+        # The region must be set for most boto3 calls to succeed.
+        os.environ["AWS_DEFAULT_REGION"] = etl.config.get_config_value("resources.VPC.region")
+        if getattr(args, "use_monitor", False):
+            etl.monitor.start_monitors(args.prefix)
+            if not args.dry_run:
+                logger.debug("Setting marker in events table for start of '%s' step", args.sub_command)
+                etl.monitor.Monitor.marker_payload(args.sub_command).emit()
+
+        args.func(args)
 
 
 def submit_step(cluster_id, sub_command):
@@ -492,10 +495,9 @@ class SubCommand(abc.ABC):
         scheme = getattr(args, "scheme", default_scheme)
         if scheme == "file":
             return scheme, "localhost", args.table_design_dir
-        elif scheme == "s3":
+        if scheme == "s3":
             return scheme, args.bucket_name, args.prefix
-        else:
-            raise ETLSystemError("scheme invalid")
+        raise ETLSystemError("scheme invalid")
 
     def find_relation_descriptions(self, args, default_scheme=None, required_relation_selector=None, return_all=False):
         """
