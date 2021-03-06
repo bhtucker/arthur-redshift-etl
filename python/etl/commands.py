@@ -15,7 +15,7 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import boto3
 import simplejson as json
@@ -296,7 +296,7 @@ def build_full_parser(prog_name):
     :param prog_name: Name that should show up as command name in help
     :return: instance of ArgumentParser that is ready to parse and run sub-commands
     """
-    parser = build_basic_parser(prog_name, description="This command allows to drive the ETL steps.")
+    parser = build_basic_parser(prog_name, description="This script allows to drive the ETL steps.")
 
     package = etl.config.package_version()
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s ({package})")
@@ -309,6 +309,7 @@ def build_full_parser(prog_name):
         dest="sub_command",
     )
     for klass in [
+        # TODO(tom): Split into common and infrequent commands, sort alphabetically.
         # Commands to deal with data warehouse as admin
         InitializeSetupCommand,
         ShowRandomPassword,
@@ -359,16 +360,14 @@ def build_full_parser(prog_name):
     return parser
 
 
-def add_standard_arguments(parser, options):
+def add_standard_arguments(parser: argparse.ArgumentParser, option_names: Iterable[str]) -> None:
     """
     Add from set of "standard" arguments.
 
     They are "standard" in that the name and description should be the same when used
     by multiple sub-commands.
-
-    :param parser: should be a sub-parser
-    :param options: see option strings below, like "prefix", "pattern"
     """
+    options = frozenset(option_names)
     if "dry-run" in options:
         parser.add_argument("-n", "--dry-run", help="do not modify stuff", default=False, action="store_true")
     if "prefix" in options:
@@ -557,9 +556,10 @@ class InitializeSetupCommand(SubCommand):
         super().__init__(
             "initialize",
             "create ETL database",
-            "(Re)create database referenced in ETL credential, optionally creating users and groups."
-            " Normally, we expect this to be a validation database (name starts with 'validation')."
-            " When bringing up your primary production or development database, use the --force option.",
+            "(Re)create database referenced in ETL credential, optionally creating users and"
+            " groups. Normally, we expect this to be a validation database (name starts with"
+            " 'validation'). When bringing up your primary production or development database,"
+            " use the --force option.",
         )
 
     def add_arguments(self, parser):
@@ -655,7 +655,7 @@ class UpdateUserCommand(SubCommand):
         super().__init__(
             "update_user",
             "update user's group, password, and path",
-            "Update an existing user with group membership, password, and search path."
+            "For an existing user, update group membership, password, and search path."
             " Note that you have to set a password for the user in your '~/.pgpass' file"
             " before invoking this command if you want to update the password. The password must"
             " be valid in Redshift, so must contain upper-case and lower-case characters as well"
@@ -727,8 +727,8 @@ class BootstrapSourcesCommand(SubCommand):
         super().__init__(
             "bootstrap_sources",
             "bootstrap schema information from sources",
-            "Download schema information from upstream sources for table designs."
-            " If there is no current design file, then create one as a starting point.",
+            "Download schema information from upstream sources and compare against current table"
+            " designs. If there is no current design file, then create one as a starting point.",
             aliases=["design"],
         )
 
@@ -898,7 +898,7 @@ class ExtractToS3Command(MonitoredSubCommand):
         )
         group.add_argument(
             "--use-existing-csv-files",
-            help="skip extraction and go straight to creating manifest files, implied default for static sources",
+            help="skip extraction and go straight to creating manifest files," " implied default for static sources",
             const="manifest-only",
             action="store_const",
             dest="extractor",
@@ -915,7 +915,7 @@ class ExtractToS3Command(MonitoredSubCommand):
             "--max-partitions",
             metavar="N",
             type=int,
-            help="set max number of partitions to write to N (overrides 'resources.EMR.max_partitions')",
+            help="set max number of partitions to write to N (overrides" " 'resources.EMR.max_partitions')",
         )
         parser.add_argument(
             "--use-sampling",
@@ -964,9 +964,10 @@ class LoadDataWarehouseCommand(MonitoredSubCommand):
         super().__init__(
             "load",
             "load data into source tables and forcefully update all dependencies",
-            "Load data into the data warehouse from files in S3, which will *rebuild* the data warehouse."
-            " This will operate on entire schemas at once, which will be backed up as necessary."
-            " It is an error to try to select tables unless they are all the tables in the schema.",
+            "Load data into the data warehouse from files in S3, which will *rebuild* the data"
+            " warehouse. This will operate on entire schemas at once, which will be backed up as"
+            " necessary. It is an error to try to select tables unless they are all the tables in"
+            " the schema.",
         )
 
     def add_arguments(self, parser):
@@ -975,15 +976,16 @@ class LoadDataWarehouseCommand(MonitoredSubCommand):
         )
         parser.add_argument(
             "--concurrent-extract",
-            help="watch DynamoDB for extract step completion and load source tables as extracts finish"
-            " assuming another Arthur in this prefix is running extract (default: %(default)s)",
+            help="watch DynamoDB for extract step completion and load source tables as extracts"
+            " finish assuming another Arthur in this prefix is running extract"
+            " (default: %(default)s)",
             default=False,
             action="store_true",
         )
         parser.add_argument(
             "--without-staging-schemas",
-            help="do NOT do all the work in hidden schemas and publish to standard names on completion"
-            " (default: use staging schemas)",
+            help="do NOT do all the work in hidden schemas and publish to standard names on"
+            " completion (default: use staging schemas)",
             default=True,
             action="store_false",
             dest="use_staging_schemas",
@@ -1103,8 +1105,8 @@ class UpdateDataWarehouseCommand(MonitoredSubCommand):
         super().__init__(
             "update",
             "update data in the data warehouse from files in S3",
-            "Load data into data warehouse from files in S3 and then update all dependent CTAS relations"
-            " (within a transaction).",
+            "Load data into data warehouse from files in S3 and then update all dependent"
+            " CTAS relations (within a transaction).",
         )
 
     def add_arguments(self, parser):
@@ -1152,7 +1154,7 @@ class UnloadDataToS3Command(MonitoredSubCommand):
         super().__init__(
             "unload",
             "unload data from data warehouse to files in S3",
-            "Unload data from data warehouse into CSV files in S3 (along with files of column names).",
+            "Unload data from data warehouse into CSV files in S3 (along with files of column" " names).",
         )
 
     def add_arguments(self, parser):
@@ -1213,10 +1215,10 @@ class PromoteSchemasCommand(SubCommand):
         super().__init__(
             "promote_schemas",
             "move staging or backup schemas into standard position",
-            "Move hidden schemas (staging or backup) to standard position (schema names and permissions)."
-            " When promoting from staging, current standard position schemas are backed up first."
-            " Promoting (ie, restoring) a backup should only happen after a load finished successfully"
-            " but left bad data behind.",
+            "Move hidden schemas (staging or backup) to standard position (schema names and"
+            " permissions). When promoting from staging, current standard position schemas are"
+            " backed up first. Promoting (ie, restoring) a backup should only happen after a load"
+            " finished successfully but left bad data behind.",
         )
 
     def add_arguments(self, parser):
@@ -1560,8 +1562,8 @@ class RenderTemplateCommand(SubCommand):
         super().__init__(
             "render_template",
             "render selected template by filling in configuration settings",
-            "Print template after replacing placeholders (like '${resources.VPC.region}') with values"
-            " from the settings files",
+            "Print template after replacing placeholders (like '${resources.VPC.region}') with"
+            " values from the settings files",
         )
 
     def add_arguments(self, parser):
@@ -1652,9 +1654,8 @@ class QueryEventsCommand(SubCommand):
         super().__init__(
             "query_events",
             "query the tables of ETL events",
-            "Query the table of events written during an ETL."
-            " When an ETL is specified, then it is used as a filter."
-            " Otherwise ETLs from the last 48 hours are listed.",
+            "Query the table of events written during an ETL. When an ETL is specified, then it is"
+            " used as a filter. Otherwise ETLs from the last 48 hours are listed.",
         )
 
     def add_arguments(self, parser):
@@ -1682,7 +1683,7 @@ class SummarizeEventsCommand(SubCommand):
         super().__init__(
             "summarize_events",
             "summarize events from the latest ETL (for given step)",
-            "For selected (or all) relations, show events from ETL, " "grouped by schema.",
+            "For selected (or all) relations, show events from ETL, grouped by schema.",
         )
 
     def add_arguments(self, parser):
@@ -1705,8 +1706,8 @@ class TailEventsCommand(SubCommand):
             "tail_events",
             "show tail of the ETL events and optionally follow for changes",
             "Show latest ETL events for the selected tables in a 15-minute window or"
-            " since the given start time. (Use '-t #{@latestRunTime}' in a Data Pipeline definition.)"
-            " Optionally keep looking for events in 30s intervals,"
+            " since the given start time. (Use '-t #{@latestRunTime}' in a Data Pipeline"
+            " definition.) Optionally keep looking for events in 30s intervals,"
             " which automatically quits when no new event arrives within an hour.",
         )
 
