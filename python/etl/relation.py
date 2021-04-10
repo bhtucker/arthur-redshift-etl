@@ -109,7 +109,7 @@ class RelationDescription:
     def __repr__(self):
         return "{}({}:{})".format(self.__class__.__name__, self.identifier, self.source_path_name)
 
-    def __format__(self, code):
+    def __format__(self, code) -> str:
         r"""
         Format target table as delimited identifier (with quotes) or just as an identifier.
 
@@ -123,12 +123,11 @@ class RelationDescription:
         """
         if (not code) or (code == "s"):
             return str(self.target_table_name)
-        elif code == "x":
+        if code == "x":
             return "{:x}".format(self.target_table_name)
-        else:
-            raise ValueError("unsupported format code '{}' passed to RelationDescription".format(code))
+        raise ValueError(f"unsupported format code '{code}' passed to RelationDescription")
 
-    def load(self, callback=None) -> None:
+    def load(self, callback=None) -> "RelationDescription":
         """
         Force a loading of the table design (which is normally loaded "on demand").
 
@@ -147,6 +146,7 @@ class RelationDescription:
             )
         if callback is not None:
             callback()
+        return self
 
     @staticmethod
     def load_in_parallel(relations: Sequence["RelationDescription"]) -> None:
